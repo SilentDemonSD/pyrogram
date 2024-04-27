@@ -109,7 +109,9 @@ class SaveFile:
                 except Exception as e:
                     log.exception(e)
 
-        part_size = 512 * 1024
+        part_size = 1024 * 1024
+        # Request is 'fast' if it was done in less than 1s and
+        # (it-s size + queued before size) >= 512kb.
 
         if isinstance(path, (str, PurePath)):
             fp = open(path, "rb")
@@ -127,7 +129,7 @@ class SaveFile:
         if file_size == 0:
             raise ValueError("File size equals to 0 B")
 
-        file_size_limit_mib = 4000 if self.me.is_premium else 2000
+        file_size_limit_mib = 8000 / 2 if self.me.is_premium else 4000 / 2
 
         if file_size > file_size_limit_mib * 1024 * 1024:
             raise ValueError(f"Can't upload files bigger than {file_size_limit_mib} MiB")
@@ -135,7 +137,7 @@ class SaveFile:
         file_total_parts = int(math.ceil(file_size / part_size))
         is_big = file_size > 10 * 1024 * 1024
         pool_size = 3 if is_big else 1
-        workers_count = 4 if is_big else 1
+        workers_count = 5 if is_big else 1
         is_missing_part = file_id is not None
         file_id = file_id or self.rnd_id()
         md5_sum = md5() if not is_big and not is_missing_part else None
@@ -145,6 +147,7 @@ class SaveFile:
                 await self.storage.test_mode(), is_media=True
             ) for _ in range(pool_size)
         ]
+        # Total Session -> 3*5 = 15
         workers = [self.loop.create_task(worker(session)) for session in pool for _ in range(workers_count)]
         queue = asyncio.Queue(16)
 
